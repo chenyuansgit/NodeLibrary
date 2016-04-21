@@ -66,9 +66,8 @@ function createServer(host){
                         return;
                     }
                     // 设置要显示的路径
-                    utils.printLog('config dir:',ftpConfig.displayDir);
-                    socket.fs.displayDir = ftpConfig.displayDir;
-                    socket.fs.dir = ftpConfig.displayDir;
+                    utils.printLog('config root dir:',ftpConfig.rootDir);
+                    socket.fs.rootDir = ftpConfig.rootDir;
                     // 通知客户端输入密码
                     socket.write("331 password required for " + socket.username + "\r\n");
                     break;
@@ -83,10 +82,13 @@ function createServer(host){
 
 
         		case 'CDUP': // 切换到父路径
-        			socket.write("250 Directory changed to " + socket.fs.chdir("..") + "\r\n");
+                    var toPath = socket.fs.chdir("..");
+                    utils.printLog('cdup:', toPath);
+        			socket.write("250 Directory changed to " + toPath + "\r\n");
                     break;
                 case "CWD": // 切换工作路径
                     var chDir = command[1].trim();
+                    utils.printLog('ftp cwd path:',chDir);
                     socket.write("250 CWD successful." + socket.fs.chdir(chDir) + "is current directory\r\n");
                     break;
 
@@ -123,10 +125,14 @@ function createServer(host){
                     socket.write("200 PORT command successful.\r\n");
                     break;
 
+                case "PASV": // 切换到被动模式
+                    break;
+
+
                 case "LIST": // 列出服务器路径下的文件
                 	socket.datatransfer = function (pasvconn) {
                         socket.write("150 Connection Accepted\r\n");
-                        utils.printLog('full path:', socket.fs.cwd(true));
+                        utils.printLog('full path:', socket.fs.cwd(true),'part:', socket.fs.cwd());
 
                         var ls = cp.execFile('ls',['-al',socket.fs.cwd(true)], function(error, result) {
                         	if(error) {
@@ -143,6 +149,127 @@ function createServer(host){
                         socket.datatransfer(tcp.createConnection(socket.pasvport, socket.pasvhost));
                     }
                     break;
+
+                case "STOR": // 上传文件
+                    socket.datatransfer = function (pasvconn) {
+                        pasvconn.setEncoding(socket.mode);
+                        socket.write("150 Connection Accepted\r\n");
+                        // 将文件上传至FTP服务器
+                        var ftpPath = socket.fs.cwd(true) + command[1].trim();
+                        utils.printLog('ftp stor path:',ftpPath);
+                        pasvconn.pipe(fs.createWriteStream(ftpPath, {encoding: socket.mode}));
+                        pasvconn.on("end", function () {
+                            //utils.printLog('transfer data over:',ftpPath);
+                            socket.write("226 Closing data connection\r\n");
+                        });
+
+                        pasvconn.on("error", function (had_error) {
+                            //utils.printLog('transfer data error:',ftpPath, had_error);
+                            socket.write("226 store faild! \r\n");
+                        });
+                    };
+                    if (!socket.passive) {
+                        utils.printLog('调用主动模式');
+                        socket.datatransfer(tcp.createConnection(socket.pasvport, socket.pasvhost));
+                    }
+                    break;
+                case "RETR": // 下载文件
+                    socket.datatransfer = function (pasvconn) {
+                        // 设置pasvconn的编码
+                        pasvconn.setEncoding(socket.mode);
+                        socket.write("150 Connection Accepted\r\n");
+
+                        if (socket.fs.cwd(true) + command[1].trim() != socket.filename) {
+                            socket.totsize = 0;
+                        }
+                        socket.filename = socket.fs.cwd(true) + command[1].trim();
+                        // 读取文件
+                        utils.printLog('ftp retr filename:',socket.filename);
+                        fs.readFile(socket.filename, socket.mode, function(error, data){
+                            if (pasvconn.readyState == "open") {
+                                pasvconn.write(data, socket.mode);
+                            }
+                             pasvconn.end();
+                         });
+                        pasvconn.on("end", function () {
+                            socket.write("226 Closing data connection, sent " + socket.totsize + " bytes\r\n");
+                        });
+                        pasvconn.on("error", function (had_error) {
+                            utils.printLog("RETR error: ",had_error);
+                        });
+                    };
+                    if (!socket.passive) {
+                        socket.datatransfer(tcp.createConnection(socket.pasvport, socket.pasvhost));
+                    }
+                    break;
+
+                case "DELE": // 删除文件
+                    var filepath = socket.fs.cwd(true) + command[1].trim();
+                    utils.printLog('ftp delete filename:',filepath);
+                    try{
+                        fs.unlink(filepath, function(error, result){
+                            if(error) {
+                                socket.write("250 file deleted faild\r\n");
+                                return;
+                            } 
+                            socket.write("226 delete the file \r\n");
+                        });
+                    }catch (e){
+                        socket.write("250 file deleted faild\r\n");
+                    }
+                    break;
+                case "RMD": //删除目录
+                    // 获取要删除的文件的路径
+                    var filepath = socket.fs.cwd(true) + command[1].trim();
+                    utils.printLog('ftp rm dir:',filepath);
+                    try{
+                        fs.rmdir(filepath, function(error, result){
+                            if(error) {
+                                socket.write("451 deleted the Directory faild\r\n");
+                                return;
+                            }
+                            socket.write("226 deleted the Directory success \r\n");
+                        });
+                    } catch(e) {
+                        socket.write("451 deleted the Directory faild\r\n");
+                    }       
+                    break;
+                case "MKD": //创建目录
+                    // 获取要新建的目录名称
+                    var dirPath = socket.fs.cwd(true) + command[1].trim();
+                    // 新建目录
+                    try{
+                        fs.mkdir(dirPath,function(error, result){
+                            if(error){
+                                socket.write("451 mkdir failure \r\n");
+                                return;
+                            }
+                            socket.write("226 create the Directory \r\n");
+                        });
+                    } catch(e){
+                        socket.write("451 mkdir failure \r\n");
+                    } 
+                    break;
+                case "RNFR": // 重命名开始
+                    socket.filefrom = socket.fs.cwd(true) + command[1].trim();
+                    socket.write("350 File exists, ready for destination name.\r\n");
+                    break;
+                case "RNTO": // 重命名
+                    var fileto = socket.fs.cwd(true) + command[1].trim();
+                    console.log(socket.filefrom, '=>', fileto);
+                    try{
+                         fs.rename(socket.filefrom, fileto, function(error, result){
+                            if(error){
+                                socket.write("451 file renamed faild\r\n");
+                                return;
+                            }
+                            socket.write("250 file renamed successfully\r\n");
+                         });
+                    } catch(e){
+                        socket.write("451 file renamed faild\r\n");
+                    }
+                    break;
+
         	}
         });
 

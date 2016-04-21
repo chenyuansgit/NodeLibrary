@@ -1,11 +1,12 @@
 
 function dummyfs() {
-    this.dir = "/"; // 当前路径全称
-    this.displayDir = ""; // 在服务器端显示的子路径名
+    this.dir = "/";     // 当前子路径名称
+    this.rootDir = ""; // 要隐藏的根路径名
 }
 
 dummyfs.prototype.chdir = function (dir) {
-    if ((this.dir == this.displayDir) && dir == "..") {
+    console.log("dir chdir to begin:", dir);
+    if ((this.dir == this.rootDir) && dir == "..") {
         return "/";
     }
 
@@ -35,22 +36,23 @@ dummyfs.prototype.chdir = function (dir) {
             }
         }
     }
-    else {
+    else { // 参数路径以/开头
         this.dir = dir;
     }
     if (this.dir.charAt(this.dir.length - 1) != "/") this.dir += "/";
 
-    return this.dir.replace(this.storeDir, "/");
-    //return this.dir;
-
+    console.log("dir chdir to end:", this.dir);
+    return this.dir;
 }
 
 dummyfs.prototype.cwd = function (all) {
+    console.log('++dir++:', this.dir,'++root++',this.rootDir);
     if (all) {
-        return (this.dir);
+        //console.log('++return dir++:', this.rootDir+this.dir);
+        return (this.rootDir+this.dir);
     }
-    console.log('dir:', this.dir,this.displayDir);
-    return this.dir.replace(this.displayDir, "/");
+    //console.log('++return dir++:', this.dir);
+    return this.dir;
 }
 
 exports.dummyfs = dummyfs;
