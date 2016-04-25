@@ -1,0 +1,23 @@
+K 25
+svn:wc:ra_dav:version-url
+V 75
+/svn/code/!svn/ver/66176/store/trunk/webInterface/public/ace/assets/js/flot
+END
+jquery.flot.min.js
+K 25
+svn:wc:ra_dav:version-url
+V 94
+/svn/code/!svn/ver/66176/store/trunk/webInterface/public/ace/assets/js/flot/jquery.flot.min.js
+END
+jquery.flot.resize.min.js
+K 25
+svn:wc:ra_dav:version-url
+V 101
+/svn/code/!svn/ver/66176/store/trunk/webInterface/public/ace/assets/js/flot/jquery.flot.resize.min.js
+END
+jquery.flot.pie.min.js
+K 25
+svn:wc:ra_dav:version-url
+V 98
+/svn/code/!svn/ver/66176/store/trunk/webInterface/public/ace/assets/js/flot/jquery.flot.pie.min.js
+END
